@@ -1,12 +1,12 @@
+from flask import Flask, request, jsonify
 import cv2
 import numpy as np
 import joblib
 import base64
 import time
-from flask import Flask, request, jsonify
 
 # Load the pre-trained model
-clf = joblib.load('heartbeat_model.pkl')  # Use relative path
+clf = joblib.load('heartbeat_model.pkl')  # Update with the correct path
 
 # Initialize variables for heart rate calculation
 last_heartbeat_time = None
@@ -36,14 +36,17 @@ app = Flask(__name__)
 def analyze_heartbeat():
     global last_heartbeat_time, heartbeat_intervals
     
-    image_data = request.json.get('image')
-    if not image_data:
-        return jsonify({'error': 'No image data provided'}), 400
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
     
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
     try:
-        image_bytes = base64.b64decode(image_data)
-        image_array = np.frombuffer(image_bytes, np.uint8)
-        frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        image_bytes = file.read()
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         
         if frame is None:
             raise ValueError("Image decoding failed")
@@ -69,7 +72,6 @@ def analyze_heartbeat():
         return jsonify(response)
     
     except Exception as e:
-        app.logger.error(f"Error processing request: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
