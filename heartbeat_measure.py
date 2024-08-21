@@ -1,52 +1,40 @@
 from flask import Flask, request, jsonify
 import numpy as np
 import cv2
-import joblib
 import base64
 import time
 
-# Load the pre-trained model
-clf = joblib.load('heartbeat_model.pkl')
+app = Flask(__name__)
 
 # Initialize variables for heart rate calculation
-last_heartbeat_time = None
-heartbeat_intervals = []
+last_pulse_time = None
+pulse_intervals = []
 
 def preprocess_frame(frame):
     """
     Preprocess the image frame: convert to grayscale, resize, and normalize.
     """
     gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    resized_frame = cv2.resize(gray_frame, (64, 64))  # Ensure the size matches the model input
+    resized_frame = cv2.resize(gray_frame, (64, 64))  # Resize for consistency
     normalized_frame = resized_frame / 255.0  # Normalize pixel values
-    return normalized_frame.flatten()
+    return normalized_frame
 
-def predict_heartbeat(frame):
+def calculate_heart_rate(pulse_intervals):
     """
-    Predict heartbeat presence using the pre-trained model.
+    Calculate heart rate from pulse intervals.
     """
-    preprocessed_frame = preprocess_frame(frame)
-    prediction = clf.predict([preprocessed_frame])
-    return prediction[0]
-
-def calculate_heart_rate(heartbeat_intervals):
-    """
-    Calculate heart rate based on intervals between detected beats.
-    """
-    if len(heartbeat_intervals) < 2:
-        return None
-    average_interval = np.mean(heartbeat_intervals)
-    heart_rate = 60 / average_interval  # Convert interval to beats per minute
+    if len(pulse_intervals) < 2:
+        return None  # Not enough data to calculate heart rate
+    average_interval = np.mean(pulse_intervals)
+    heart_rate = 60 / average_interval  # Heart rate in beats per minute
     return heart_rate
-
-app = Flask(__name__)
 
 @app.route('/analyze', methods=['POST'])
 def analyze_heartbeat():
     """
-    Handle POST requests, predict heartbeat presence, and calculate heart rate.
+    Handle POST requests, preprocess image data, and perform basic heart rate estimation.
     """
-    global last_heartbeat_time, heartbeat_intervals
+    global last_pulse_time, pulse_intervals
     
     try:
         # Get image data from the request
@@ -63,26 +51,30 @@ def analyze_heartbeat():
         
         if frame is None:
             return jsonify({'error': 'Invalid image data'}), 400
-
-        # Predict heartbeat presence
-        result = predict_heartbeat(frame)
         
-        # Calculate heart rate if a heartbeat is detected
+        # Preprocess the frame
+        preprocessed_frame = preprocess_frame(frame)
+        average_intensity = np.mean(preprocessed_frame)  # Calculate average intensity
+        
         current_time = time.time()
-        if result == 1:  # Heartbeat detected
-            if last_heartbeat_time is not None:
-                interval = current_time - last_heartbeat_time
-                heartbeat_intervals.append(interval)
-                if len(heartbeat_intervals) > 10:
-                    heartbeat_intervals.pop(0)
-            last_heartbeat_time = current_time
-
-        heart_rate = calculate_heart_rate(heartbeat_intervals)
         
-        # Prepare the response
-        response = {'result': result}
-        if heart_rate is not None:
-            response['heart_rate'] = heart_rate
+        # Detect changes in intensity to estimate pulse
+        if last_pulse_time is not None:
+            time_interval = current_time - last_pulse_time
+            if average_intensity > 0.5:  # Arbitrary threshold for pulse detection
+                pulse_intervals.append(time_interval)
+                if len(pulse_intervals) > 10:  # Keep the last 10 intervals
+                    pulse_intervals.pop(0)
+        
+        last_pulse_time = current_time
+        
+        # Calculate heart rate
+        heart_rate = calculate_heart_rate(pulse_intervals)
+        
+        response = {
+            'result': 1,  # Indicating heartbeat detected
+            'heart_rate': heart_rate if heart_rate is not None else 0  # Dummy heart rate value if None
+        }
         
         return jsonify(response)
     
