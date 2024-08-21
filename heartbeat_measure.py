@@ -3,6 +3,7 @@ import numpy as np
 import base64
 import time
 from flask import Flask, request, jsonify
+import joblib
 
 
 # Load the pre-trained model
