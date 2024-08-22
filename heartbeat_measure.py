@@ -4,8 +4,6 @@ import base64
 import time
 from flask import Flask, request, jsonify
 
-app = Flask(__name__)
-
 # Initialize variables for heart rate calculation
 last_heartbeat_time = None
 heartbeat_intervals = []
@@ -30,11 +28,10 @@ def preprocess_frame(frame):
 def predict_heartbeat(frame):
     preprocessed_frame = preprocess_frame(frame)
 
-    # Implement a more sophisticated heart rate detection algorithm here
-    # For demonstration, let's use a simple mean change detection approach
-    # This is a placeholder and should be replaced with a real algorithm
-    intensity_change = np.mean(np.diff(preprocessed_frame))  
-    return intensity_change
+    # Apply Gaussian blur to the preprocessed frame
+    filtered_frame = cv2.GaussianBlur(preprocessed_frame.reshape(64, 64), (5, 5), 0)
+    prediction = np.mean(filtered_frame)  # Simple metric for demonstration
+    return prediction
 
 def calculate_heart_rate(heartbeat_intervals):
     if len(heartbeat_intervals) < 2:
@@ -47,6 +44,8 @@ def calculate_heart_rate(heartbeat_intervals):
         return None
     return heart_rate
 
+app = Flask(__name__)
+
 @app.route('/analyze', methods=['POST'])
 def analyze_heartbeat():
     global last_heartbeat_time, heartbeat_intervals
@@ -58,6 +57,7 @@ def analyze_heartbeat():
     image_array = np.frombuffer(image_bytes, np.uint8)
     frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
     
+    # Predict heartbeat
     result = predict_heartbeat(frame)
     
     current_time = time.time()
@@ -73,14 +73,14 @@ def analyze_heartbeat():
                 heartbeat_intervals.pop(0)
         last_heartbeat_time = current_time
 
+    # Calculate heart rate based on the detected intervals
     heart_rate = calculate_heart_rate(heartbeat_intervals)
     
+    # Construct response
     response = {'result': result}
     if heart_rate is not None:
         response['heart_rate'] = heart_rate
-    else:
-        response['error'] = 'No valid heart rate detected'
-
+    
     return jsonify(response)
 
 if __name__ == '__main__':
