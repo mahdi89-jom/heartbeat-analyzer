@@ -4,6 +4,8 @@ import base64
 import time
 from flask import Flask, request, jsonify
 
+app = Flask(__name__)
+
 # Initialize variables for heart rate calculation
 last_heartbeat_time = None
 heartbeat_intervals = []
@@ -28,10 +30,11 @@ def preprocess_frame(frame):
 def predict_heartbeat(frame):
     preprocessed_frame = preprocess_frame(frame)
 
-    # Simple filtering technique (e.g., mean or median filtering) can be applied here
-    filtered_frame = cv2.GaussianBlur(preprocessed_frame.reshape(64, 64), (5, 5), 0)
-    prediction = np.mean(filtered_frame)  # Simple metric for demonstration
-    return prediction
+    # Implement a more sophisticated heart rate detection algorithm here
+    # For demonstration, let's use a simple mean change detection approach
+    # This is a placeholder and should be replaced with a real algorithm
+    intensity_change = np.mean(np.diff(preprocessed_frame))  
+    return intensity_change
 
 def calculate_heart_rate(heartbeat_intervals):
     if len(heartbeat_intervals) < 2:
@@ -43,8 +46,6 @@ def calculate_heart_rate(heartbeat_intervals):
     if heart_rate < MIN_HEART_RATE or heart_rate > MAX_HEART_RATE:
         return None
     return heart_rate
-
-app = Flask(__name__)
 
 @app.route('/analyze', methods=['POST'])
 def analyze_heartbeat():
@@ -77,7 +78,9 @@ def analyze_heartbeat():
     response = {'result': result}
     if heart_rate is not None:
         response['heart_rate'] = heart_rate
-    
+    else:
+        response['error'] = 'No valid heart rate detected'
+
     return jsonify(response)
 
 if __name__ == '__main__':
